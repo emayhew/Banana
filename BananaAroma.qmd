@@ -1,0 +1,134 @@
+---
+title: "Banana Aroma Study"
+author: "E Mayhew & A DuBois"
+format: html
+editor: visual
+---
+
+## Banana Aroma Sensory Evaluation
+
+```{r}
+## Load packages
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(agricolae)
+```
+
+```{r}
+## Read in data
+
+# Subject demographics
+demog <- read_excel("data/Banana_Project_-_Descriptive_test_-_Raw_Data.xlsx", sheet = 4, skip = 3)
+# RATA profile data
+rata <- read_excel("data/Banana_Project_-_Descriptive_test_-_Raw_Data.xlsx", sheet = 5, skip = 3)
+# Perceptual difference ratings
+diff <- read_excel("data/Banana_Project_-_Descriptive_test_-_Raw_Data.xlsx", sheet = 6, skip = 3)
+```
+
+```{r}
+## Clean data
+
+# Clean degree of difference ratings
+diff_clean <- diff %>%
+  clean_names() %>%
+  transmute(participant_code,
+            rep = repetition,
+            sample_name,
+            diff_rating = degree_of_difference_in_aromas) %>%
+  mutate(sample_name = gsub("RATA ", "", sample_name),
+         sample_name = gsub(" banana", "", sample_name)) %>%
+  separate( sample_name, into = c("odor1", "odor2"), sep = ", ") %>%
+  mutate(odorA = case_when(odor1 < odor2 ~ odor1,
+                           TRUE ~ odor2),
+         odorB = case_when(odor1 > odor2 ~ odor1,
+                           TRUE ~ odor2))%>%
+  unite("pair", odorA:odorB, sep = " to ")
+ 
+# Clean rata ratings 
+rata_clean <- rata %>%
+  clean_names() %>%
+  mutate(sample_name = gsub(" banana", "", sample_name)) %>%
+  select(participant_code, sample_name, fruity:gasoline)%>%
+  mutate_at(vars(fruity:gasoline), replace_na, 0) %>%
+  pivot_longer(fruity:gasoline, names_to = "descriptor", values_to = "rating")
+
+```
+
+```{r}
+## Plot aroma difference ratings
+diff_clean %>%
+  mutate(pair = fct_reorder(pair, diff_rating, .fun = mean))%>%
+  ggplot( aes(pair, diff_rating, color = pair)) +
+    geom_violin(draw_quantiles = 0.5) +
+    geom_point() +
+    theme_classic() +
+    ylab("Rating of Perceptual Difference") +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          axis.title.x = element_blank(),
+          legend.position = "none")
+```
+
+```{r}
+## Statistical comparison of ratings
+
+# Run anova
+anova <- aov(diff_rating ~ pair, data = diff_clean)
+summary(anova)
+
+# Conduct LSD post-hoc test
+lsd <- LSD.test(anova, "pair")
+lsd$groups
+```
+
+```{r}
+## Plot RATA profiles of banana mixtures 
+
+# facet plot
+rata_clean %>%
+  group_by(sample_name, descriptor)%>%
+  summarise(mean_rating = mean(rating),
+            se_rating = sd(rating)/sqrt(n()))%>%
+  filter(sample_name %in% c("cavendish", "gros-michel", "laffy taffy"))%>%
+  ggplot( aes(descriptor, mean_rating, fill = descriptor)) +
+  geom_col() +
+  geom_errorbar( aes(ymin = mean_rating - se_rating, ymax = mean_rating + se_rating)) +
+  facet_grid(rows = vars(sample_name))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1),
+        legend.position = "none")+
+  ylab("Mean Rating")
+
+
+# stacked plot
+rata_clean %>%
+  group_by(sample_name, descriptor)%>%
+  summarise(mean_rating = mean(rating),
+            se_rating = sd(rating)/sqrt(n()))%>%
+  filter(sample_name %in% c("cavendish", "gros-michel", "laffy taffy"))%>%
+  ggplot( aes(descriptor, mean_rating, fill = sample_name)) +
+  geom_col(position = "dodge") +
+  geom_errorbar( aes(ymin = mean_rating - se_rating, ymax = mean_rating + se_rating),
+                 position = position_dodge()) +
+  scale_fill_manual(values = c("chartreuse3", "blueviolet", "yellow1"))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1))+
+  ylab("Mean Rating")
+
+
+```
+
+```{r}
+ ## Plot RATA profiles of banana odorants
+rata_clean %>%
+  filter(! sample_name %in% c("cavendish", "gros-michel", "laffy taffy"))%>%
+  ggplot( aes(descriptor, rating, fill = descriptor)) +
+  geom_col()+
+  facet_grid(rows = vars(sample_name))+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 45,
+                                   hjust = 1),
+        legend.position = "none")
+```
