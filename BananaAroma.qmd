@@ -82,6 +82,16 @@ lsd$groups
 ```
 
 ```{r}
+## Plot test-retest correlation
+ diff_clean %>%
+   select(-odor1) %>%
+   select(-odor2) %>%
+   pivot_wider(names_from = "rep",
+               values_from = "diff_rating", 
+               names_prefix = "rep") 
+```
+
+```{r}
 ## Plot RATA profiles of banana mixtures 
 
 # facet plot
